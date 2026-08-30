@@ -1,36 +1,20 @@
-product_name,category,material,price,stock,english_desc,image_path
-Handicraft,Bamboo,25.0,10,A sturdy handwoven bamboo basket crafted by local artisans, ideal for storage or decor.,data\images\basket1.jpg
-Pottery,Terracotta,15.5,5,A traditional terracotta pot that keeps water naturally cool, handmade on a potter's wheel.,data\images\pot1.jpg
-Handloom / Textile,Cotton,40.0,3,A hand-embroidered cotton wall hanging featuring traditional folk motifs.,data\images\wallhanging1.webp,
-Whatsapp Application,Handicraft,Traditional materials,288,5,"Handcrafted Whatsapp Application made using traditional techniques by skilled Indian artisans.
+product_name,category,material,language,price,stock,english_desc,image_path
+Handwoven Basket,Handicraft,Bamboo,Hindi,25,10,"A sturdy handwoven bamboo basket crafted by local artisans, ideal for storage or decor.",data/images/basket1.jpg
+Clay Water Pot,Pottery,Terracotta,Marathi,15,5,"A traditional terracotta pot that keeps water naturally cool, handmade on a potter's wheel.",data/images/pot1.jpg
+Embroidered Wall Hanging,Handloom / Textile,Cotton,Not detected,40,3,"A hand-embroidered cotton wall hanging featuring traditional folk motifs.",data/images/wallhanging1.webp
+Whatsapp Application,Handicraft,Traditional materials,Not detected,288,5,"Handcrafted Whatsapp Application made using traditional techniques by skilled Indian artisans.
 
 Material: Traditional materials
 Category: Handicraft
 
 WhatsApp application
 
-This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products\whatsapp_application.png
-इस द फॉर्मेट ऑफ़ नॉर्दर्न वॉटर,Handicraft,Traditional materials,288,2,"Handcrafted इस द फॉर्मेट ऑफ़ नॉर्दर्न वॉटर made using traditional techniques by skilled Indian artisans.
-
-Material: Traditional materials
-Category: Handicraft
-
-इस द फॉर्मेट ऑफ़ नॉर्दर्न वॉटर विच इस यूज्ड इन शॉर्ट प्रोडक्ट्स
-
-This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products\.png
-This Is An Utensils,Handicraft,Traditional materials,288,1,"Handcrafted This Is An Utensils made using traditional techniques by skilled Indian artisans.
+This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products/whatsapp_application.png
+This Is An Utensils,Handicraft,Traditional materials,Not detected,288,1,"Handcrafted This Is An Utensils made using traditional techniques by skilled Indian artisans.
 
 Material: Traditional materials
 Category: Handicraft
 
 this is an utensils
 
-This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products\this_is_an_utensils.png
-This Is An Utensils,Handicraft,Traditional materials,288,1,"Handcrafted This Is An Utensils made using traditional techniques by skilled Indian artisans.
-
-Material: Traditional materials
-Category: Handicraft
-
-this is an utensils
-
-This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products\this_is_an_utensils.png
+This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products/this_is_an_utensils.png

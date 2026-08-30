@@ -33,8 +33,8 @@ streamlit run app.py
 AGR_sutra/
 ├── app.py
 ├── pages/
-│   ├── 1_Dashboard.py
-│   └── 2_Marketplace.py
+│   ├── Dashboard.py
+│   └── Marketplace.py
 ├── data/
 │   └── products.csv
 ├── requirements.txt
@@ -63,17 +63,19 @@ AGR_sutra/
 
 ## API keys / environment variables
 
-This app uses the **Google Generative AI (Gemini)** API to generate product descriptions. Each teammate needs their own API key:
+This app uses the **Google Gen AI (Gemini)** SDK (`google-genai`) for both voice transcription/language detection and product-description generation. Each teammate needs their own API key:
 
 1. Get a key from [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Create a `.streamlit/secrets.toml` file in the project root (this is already gitignored, so it won't be committed):
    ```toml
-   GOOGLE_API_KEY = "your-key-here"
+   GEMINI_API_KEY = "your-key-here"
    ```
-3. In `app.py`, load it with:
+3. `app.py` reads it automatically via:
    ```python
-   genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+   GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+   client = genai.Client(api_key=GEMINI_API_KEY)
    ```
+   If no key is configured, the app falls back gracefully: voice transcription uses local `speech_recognition` with a manual language picker, and product descriptions use a basic template instead of AI-generated copy.
 
 **Microphone input note:** if the app records audio from your mic (not just uploaded audio files), `speech_recognition` also needs `PyAudio`, which requires the system library `portaudio`:
 - Mac: `brew install portaudio` then `pip install pyaudio`

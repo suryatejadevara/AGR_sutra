@@ -5,14 +5,19 @@ import os
 st.set_page_config(page_title="AGR Sutra — Marketplace", page_icon="🛒", layout="centered")
 
 DATA_PATH = "data/products.csv"
+EXPECTED_COLUMNS = ["product_name", "category", "material", "language", "price", "stock", "english_desc", "image_path"]
 
 st.title("🛒 AGR SUTRA Marketplace")
 st.divider()
 
 if os.path.exists(DATA_PATH):
-    df = pd.read_csv(DATA_PATH)
+    try:
+        df = pd.read_csv(DATA_PATH)
+    except Exception:
+        st.error("⚠️ Couldn't read the product catalog right now — please try again shortly.")
+        df = pd.DataFrame(columns=EXPECTED_COLUMNS)
 else:
-    df = pd.DataFrame(columns=["product_name", "category", "material", "price", "stock", "english_desc", "image_path"])
+    df = pd.DataFrame(columns=EXPECTED_COLUMNS)
 
 search = st.text_input("Search products...")
 
@@ -41,6 +46,21 @@ else:
             st.markdown(f"**{row['product_name']}**")
             st.markdown(f"₹{int(row['price']):,}")
             st.caption(f"{row['category']} · {row.get('material', '')}")
+
+            stock = row.get("stock")
+            if pd.notna(stock):
+                stock = int(stock)
+                if stock <= 0:
+                    st.caption("🔴 Out of stock")
+                elif stock <= 2:
+                    st.caption(f"🟠 Only {stock} left")
+                else:
+                    st.caption(f"🟢 {stock} available")
+
+            language = row.get("language")
+            if isinstance(language, str) and language != "Not detected":
+                st.caption(f"🌐 Listed in {language}")
+
             # Keyed on the DataFrame row index (idx), not name+price, so two
             # products that happen to share a name and price can't collide.
             if st.button("VIEW PRODUCT", key=f"view_{idx}"):

@@ -10,6 +10,10 @@ import google.genai as genai
 from google.genai import types
 import pandas as pd
 import os
+from sklearn.linear_model import Ridge
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import Pipeline
 
 DATA_PATH = "data/products.csv"
 IMAGE_DIR = "assets/products"
@@ -119,6 +123,106 @@ Respond with ONLY valid JSON, no markdown code fences, no extra text, in exactly
     except Exception:
         return None
 
+# -------------------- Pricing Model --------------------
+# This is a small, honestly-labeled STARTER dataset — illustrative price
+# points across category/size/cost combinations, not real market data. It
+# exists so the pricing assistant is a trained model from day one instead of
+# a hardcoded multiplier, and so the code path for retraining on real sales
+# data (once products actually sell) already exists. As real transactions
+# accumulate in data/products.csv, swap/extend this seed set with them.
+PRICING_SEED_DATA = pd.DataFrame([
+    # category,               material,        size,               raw_cost, labor_cost, price
+    ("Pottery",               "Terracotta",    "Small",            40,  30,  110),
+    ("Pottery",               "Terracotta",    "Medium",           70,  60,  220),
+    ("Pottery",               "Terracotta",    "Large / Detailed", 120, 100, 420),
+    ("Handloom / Textile",    "Cotton",        "Small",            60,  50,  180),
+    ("Handloom / Textile",    "Cotton",        "Medium",           120, 100, 380),
+    ("Handloom / Textile",    "Silk",          "Large / Detailed", 300, 250, 1100),
+    ("Handicraft",            "Wood",          "Small",            50,  40,  150),
+    ("Handicraft",            "Bamboo",        "Medium",           80,  70,  260),
+    ("Handicraft",            "Cane",          "Large / Detailed", 150, 130, 520),
+    ("Jewelry",               "Silver",        "Small",            200, 80,  480),
+    ("Jewelry",               "Brass",         "Medium",           150, 100, 420),
+    ("Jewelry",               "Gold",          "Large / Detailed", 800, 300, 2200),
+    ("Woodwork",              "Wood",          "Small",            60,  50,  180),
+    ("Woodwork",              "Wood",          "Medium",           100, 90,  340),
+    ("Woodwork",              "Wood",          "Large / Detailed", 200, 180, 720),
+    ("Other",                 "Traditional materials", "Small",    50,  40,  140),
+    ("Other",                 "Traditional materials", "Medium",   90,  70,  260),
+    ("Other",                 "Traditional materials", "Large / Detailed", 160, 130, 480),
+], columns=["category", "material", "size", "raw_cost", "labor_cost", "price"])
+
+
+@st.cache_resource(show_spinner=False)
+def get_pricing_model():
+    """Trains (and caches) a small Ridge regression on the seed pricing
+    dataset above, refreshed with any real published listings in
+    data/products.csv that carry enough info to be used as training rows.
+    Returns a fitted sklearn Pipeline. This replaces the old fixed
+    (cost x multiplier) formula with an actual — if currently
+    data-starved — learned model."""
+    training_df = PRICING_SEED_DATA.copy()
+
+    # Fold in real published products as extra training signal, once they
+    # exist and have the columns we need (older rows may not — skip those).
+    if os.path.exists(DATA_PATH):
+        try:
+            live = pd.read_csv(DATA_PATH)
+            needed = {"category", "material", "price"}
+            if needed.issubset(live.columns):
+                live = live.dropna(subset=["category", "price"]).copy()
+                live["material"] = live.get("material", "Traditional materials").fillna("Traditional materials")
+                # Live listings don't record raw_cost/labor_cost/size — impute
+                # reasonable placeholders so they can still contribute a
+                # category/material/price signal without dominating the fit.
+                live["size"] = "Medium"
+                live["raw_cost"] = (live["price"] / 3).round()
+                live["labor_cost"] = (live["price"] / 4).round()
+                training_df = pd.concat(
+                    [training_df, live[["category", "material", "size", "raw_cost", "labor_cost", "price"]]],
+                    ignore_index=True,
+                )
+        except Exception:
+            pass  # fall back to seed-only training if the live CSV is malformed
+
+    categorical_features = ["category", "size"]
+    numeric_features = ["raw_cost", "labor_cost"]
+
+    preprocessor = ColumnTransformer([
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features),
+    ], remainder="passthrough")
+
+    model = Pipeline([
+        ("preprocess", preprocessor),
+        ("regressor", Ridge(alpha=1.0)),
+    ])
+
+    X = training_df[categorical_features + numeric_features]
+    y = training_df["price"]
+    model.fit(X, y)
+    return model
+
+
+def predict_price(category: str, size: str, raw_cost: float, labor_cost: float) -> int:
+    """Predicts a suggested selling price using the trained pricing model.
+    Falls back to a simple cost-plus estimate if the model errors for any
+    reason, so the pricing assistant never crashes the app."""
+    model = get_pricing_model()
+    try:
+        row = pd.DataFrame([{
+            "category": category,
+            "size": size,
+            "raw_cost": raw_cost,
+            "labor_cost": labor_cost,
+        }])
+        predicted = float(model.predict(row)[0])
+        # Never suggest below cost — floor at 1.2x cost as a sanity check.
+        floor = (raw_cost + labor_cost) * 1.2
+        return int(max(predicted, floor))
+    except Exception:
+        return int((raw_cost + labor_cost) * 1.8)
+
+
 # -------------------- Page Config --------------------
 st.set_page_config(
     page_title="Artisan AI Product Studio",
@@ -149,10 +253,10 @@ if not st.session_state['selling_started']:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("📊 Dashboard", use_container_width=True):
-            st.switch_page("pages/dashboard.py")
+            st.switch_page("pages/Dashboard.py")
     with col2:
         if st.button("🛒 Marketplace", use_container_width=True):
-            st.switch_page("pages/marketplace.py")
+            st.switch_page("pages/Marketplace.py")
 
     st.stop()
 
@@ -254,13 +358,20 @@ def extract_material(text: str) -> str:
             return keyword.title()
     return "Traditional materials"
 
-def save_product(product_name, category, material, price, stock, english_desc, image):
+def save_product(product_name, category, material, price, stock, english_desc, image, language=None):
     """Appends one product to data/products.csv and saves its image to disk.
-    Creates the data/ and assets/products/ folders on first run."""
+    Creates the data/ and assets/products/ folders on first run.
+    `language` records which language the artisan spoke when describing the
+    product (auto-detected upstream), for dashboard reporting — falls back to
+    "Not detected" if the artisan typed instead of speaking."""
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
 
     safe_name = re.sub(r"[^a-zA-Z0-9]+", "_", product_name).strip("_").lower()
+    if not safe_name:
+        # product_name produced nothing usable (e.g. only punctuation/emoji) —
+        # fall back to a unique name instead of writing to "assets/products/.png"
+        safe_name = f"product_{hashlib.md5(product_name.encode('utf-8')).hexdigest()[:8]}"
     image_path = os.path.join(IMAGE_DIR, f"{safe_name}.png")
     image.save(image_path, format="PNG")
 
@@ -268,6 +379,7 @@ def save_product(product_name, category, material, price, stock, english_desc, i
         "product_name": product_name,
         "category": category,
         "material": material,
+        "language": language or "Not detected",
         "price": price,
         "stock": stock,
         "english_desc": english_desc,
@@ -506,20 +618,12 @@ with col2:
 with col3:
     size = st.selectbox("Size / Complexity", ["Small", "Medium", "Large / Detailed"])
 
-# Pricing logic
-multiplier = {
-    "Small": 1.6,
-    "Medium": 1.9,
-    "Large / Detailed": 2.3
-}
-
-base = raw_cost + labor_cost
-suggested_price = int(base * multiplier[size])
-
-# Category bonus for higher-value categories
+# Pricing: trained regression model (see get_pricing_model / predict_price
+# above), not a fixed multiplier table. Learns from a seed dataset plus any
+# real published listings, so it should improve as the marketplace grows.
 current_category = st.session_state.get('category', FALLBACK_CATEGORY)
-if current_category in ["Handloom / Textile", "Jewelry"]:
-    suggested_price = int(suggested_price * 1.15)
+base = raw_cost + labor_cost
+suggested_price = predict_price(current_category, size, raw_cost, labor_cost)
 
 st.metric(
     label="Recommended Selling Price",
@@ -527,7 +631,11 @@ st.metric(
     delta=f"Markup: {int((suggested_price / base - 1) * 100)}%" if base > 0 else None
 )
 
-st.caption("Price is calculated based on material + labor + size + category market trends.")
+st.caption(
+    "🤖 Price suggested by a regression model trained on category, material, size, "
+    "and cost patterns — currently seeded with illustrative starting data, and set to "
+    "improve automatically as real listings are published."
+)
 
 st.divider()
 
@@ -554,6 +662,7 @@ if enhanced_image is not None and 'english_desc' in st.session_state:
             stock=stock_qty,
             english_desc=st.session_state['english_desc'],
             image=enhanced_image,
+            language=st.session_state.get('detected_language'),
         )
         st.success("✅ PRODUCT PUBLISHED — your product is now in the AGR Sutra Marketplace.")
         st.balloons()

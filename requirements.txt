@@ -4,3 +4,4 @@ Pillow
 rembg
 SpeechRecognition
 google-genai
+scikit-learn
