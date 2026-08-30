@@ -59,6 +59,7 @@ AGR_sutra/
 | `stock`         | Quantity available                        |
 | `english_desc`  | Generated English product description     |
 | `image_path`    | Path to the processed (background-removed) product image, saved under `assets/products/` |
+| `language`      | Language the artisan spoke in when describing the product (auto-detected via Gemini, or "Not detected" if typed) |
 
 ## API keys / environment variables
 

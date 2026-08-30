@@ -22,7 +22,6 @@ col1, col2 = st.columns(2)
 with col1:
     st.metric("Products", len(df))
 with col2:
-    total_revenue = int((df["price"] * (df.get("sold", 0) if "sold" in df.columns else 0)).sum()) if not df.empty else 0
     # No real sales tracking yet — show potential inventory value instead, labeled honestly
     inventory_value = int(df["price"].sum()) if not df.empty else 0
     st.metric("Inventory Value", f"₹{inventory_value:,}")
@@ -30,6 +29,7 @@ with col2:
 st.divider()
 
 if st.button("➕ ADD NEW PRODUCT", type="primary", use_container_width=True):
+    st.session_state['selling_started'] = True
     st.switch_page("app.py")
 
 st.divider()

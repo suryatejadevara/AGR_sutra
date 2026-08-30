@@ -30,7 +30,7 @@ st.divider()
 if filtered.empty:
     st.info("No products found. Publish a product from the Add Product page first.")
 else:
-    for _, row in filtered.iloc[::-1].iterrows():
+    for idx, row in filtered.iloc[::-1].iterrows():
         col1, col2 = st.columns([1, 2])
         with col1:
             if isinstance(row.get("image_path"), str) and row["image_path"] and os.path.exists(row["image_path"]):
@@ -41,6 +41,8 @@ else:
             st.markdown(f"**{row['product_name']}**")
             st.markdown(f"₹{int(row['price']):,}")
             st.caption(f"{row['category']} · {row.get('material', '')}")
-            if st.button("VIEW PRODUCT", key=f"view_{row['product_name']}_{row['price']}"):
+            # Keyed on the DataFrame row index (idx), not name+price, so two
+            # products that happen to share a name and price can't collide.
+            if st.button("VIEW PRODUCT", key=f"view_{idx}"):
                 st.write(row.get("english_desc", ""))
         st.divider()

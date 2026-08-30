@@ -7,6 +7,7 @@ import re
 import hashlib
 import json
 import google.genai as genai
+from google.genai import types
 import pandas as pd
 import os
 
@@ -26,6 +27,49 @@ def get_gemini_client():
     if not GEMINI_API_KEY:
         return None
     return genai.Client(api_key=GEMINI_API_KEY)
+
+
+def transcribe_audio_gemini(audio_bytes: bytes, mime_type: str):
+    """Sends the raw voice recording directly to Gemini so it can automatically
+    detect which language the artisan spoke — ANY language, not limited to a
+    hardcoded list — and transcribe it in the same call. This is the primary
+    transcription path; it has no language ceiling the way the offline
+    speech_recognition fallback does. Returns (transcript, detected_language)
+    on success, or None if Gemini isn't configured or the call/parse fails —
+    callers should fall back to local speech recognition in that case."""
+    client = get_gemini_client()
+    if client is None:
+        return None
+
+    prompt = """Listen to this audio of an Indian artisan describing their handmade product.
+
+Automatically detect which language they are speaking. It could be any language spoken in
+India — including but not limited to Hindi, English, Marathi, Tamil, Telugu, Bengali,
+Gujarati, Kannada, Malayalam, Punjabi, Urdu, Odia, Assamese, Nepali, Sanskrit, Sindhi,
+Bhojpuri, Maithili, Konkani, Manipuri (Meitei), Dogri, Bodo, or Santali — or any other
+language. Do not assume the language in advance; identify it from what you hear.
+
+Respond with ONLY valid JSON, no markdown code fences, no extra text, in exactly this shape:
+{"detected_language": "<English name of the language, e.g. Hindi, Bhojpuri, Santali>", "transcript": "<what they said, transcribed in its original language and script>"}"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                prompt,
+            ],
+        )
+        cleaned = response.text.strip()
+        cleaned = re.sub(r"^```(json)?|```$", "", cleaned, flags=re.MULTILINE).strip()
+        data = json.loads(cleaned)
+        transcript = data.get("transcript")
+        detected_language = data.get("detected_language")
+        if transcript:
+            return transcript, (detected_language or "Unknown")
+        return None
+    except Exception:
+        return None
 
 
 def generate_ai_description(raw_text: str, category: str, material: str, spoken_language: str):
@@ -138,8 +182,32 @@ LANGUAGES = {
     "ಕನ್ನಡ (Kannada)": ("kn-IN", "Kannada"),
     "മലയാളം (Malayalam)": ("ml-IN", "Malayalam"),
     "ਪੰਜਾਬੀ (Punjabi)": ("pa-IN", "Punjabi"),
+    "اردو (Urdu)": ("ur-IN", "Urdu"),
+    "ଓଡ଼ିଆ (Odia)": ("or-IN", "Odia"),
+    "অসমীয়া (Assamese)": ("as-IN", "Assamese"),
+    "नेपाली (Nepali)": ("ne-NP", "Nepali"),
+    "संस्कृत (Sanskrit)": ("sa-IN", "Sanskrit"),
+    "سنڌي (Sindhi)": ("sd-IN", "Sindhi"),
+    "भोजपुरी (Bhojpuri)": ("bho-IN", "Bhojpuri"),
+    "मैथिली (Maithili)": ("mai-IN", "Maithili"),
+    "कोंकणी (Konkani)": ("kok-IN", "Konkani"),
+    "ꯃꯤꯇꯩꯂꯣꯟ (Manipuri)": ("mni-IN", "Manipuri"),
+    "डोगरी (Dogri)": ("doi-IN", "Dogri"),
+    "बड़ो (Bodo)": ("brx-IN", "Bodo"),
+    "ᱥᱟᱱᱛᱟᱲᱤ (Santali)": ("sat-IN", "Santali"),
 }
 DEFAULT_LANGUAGE_LABEL = "हिंदी (Hindi)"
+# NOTE: this manual list is only used as an OFFLINE FALLBACK when Gemini isn't
+# configured (see transcribe_audio_gemini above, which is the primary path and
+# has no language ceiling). It relies on speech_recognition's FREE Google Web
+# Speech API, which has undocumented and inconsistent language coverage — not
+# the same as Google's paid Cloud Speech-to-Text. The first ten languages
+# (Hindi through Punjabi) are commonly reported to work well. Urdu through
+# Sindhi are less consistently supported. Bhojpuri through Santali are
+# included for completeness of India's 22 scheduled languages, but their
+# locale codes are unverified against the free API and may not work at all —
+# test each before a live demo. This is exactly the gap the Gemini path
+# above solves: it doesn't need a matching locale code per language.
 
 # Cap the working image size — full-resolution phone photos (12MP+) make
 # background removal much slower for no visible catalog benefit.
@@ -291,50 +359,78 @@ st.divider()
 st.subheader("2️⃣ Speak About Your Product")
 st.markdown("🎤 Describe what it is, what it's made of, and how it's made — the AI will do the rest.")
 
-# ---- Language selector: one-tap buttons, native script first, so an ----
-# ---- artisan can pick their own language before recording. ----
-st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
-selected_label = st.pills(
-    "Voice language",
-    options=list(LANGUAGES.keys()),
-    default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
-    label_visibility="collapsed",
-)
-if selected_label is None:
-    # st.pills allows de-selecting; fall back to whatever was chosen before.
-    selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
-st.session_state['language_label'] = selected_label
-selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
+# ---- Language: Gemini auto-detects it from the audio directly — no list, ----
+# ---- no ceiling. The manual picker below only appears if Gemini isn't ----
+# ---- configured, as an offline fallback with limited language coverage. ----
+gemini_available = get_gemini_client() is not None
+selected_lang_code, selected_lang_name = LANGUAGES[DEFAULT_LANGUAGE_LABEL]
+
+if gemini_available:
+    st.caption("🌐 Speak in any language — the AI will automatically detect it, no need to select.")
+else:
+    st.warning("⚠️ AI auto-detect isn't configured — please select your language manually.")
+    st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
+    selected_label = st.pills(
+        "Voice language",
+        options=list(LANGUAGES.keys()),
+        default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
+        label_visibility="collapsed",
+    )
+    if selected_label is None:
+        selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
+    st.session_state['language_label'] = selected_label
+    selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
 
 audio_value = st.audio_input("Record your voice description")
 
-spoken_text = ""
 if audio_value is not None:
-    # Hash the audio + language together — re-transcribe only when the
-    # recording OR the chosen language actually changes, not on every rerun.
-    audio_hash = hashlib.md5(audio_value.getvalue()).hexdigest()
-    transcription_key = f"{audio_hash}:{selected_lang_code}"
+    audio_bytes = audio_value.getvalue()
+    cache_key = hashlib.md5(audio_bytes).hexdigest()
+    if not gemini_available:
+        # Re-transcribe if the artisan changes the manual language too.
+        cache_key += f":{selected_lang_code}"
 
-    if st.session_state.get('transcription_key') != transcription_key:
-        recognizer = sr.Recognizer()
-        with st.spinner(f"Transcribing your {selected_lang_name} voice description..."):
-            try:
-                with sr.AudioFile(audio_value) as source:
-                    audio_data = recognizer.record(source)
-                    spoken_text = recognizer.recognize_google(audio_data, language=selected_lang_code)
-                st.success(f"Heard ({selected_lang_name}): \"{spoken_text}\"")
-                st.session_state['spoken_text'] = spoken_text
-                st.session_state['transcription_key'] = transcription_key
-            except Exception:
-                st.warning(
-                    "Couldn't transcribe that clearly — please check the selected language "
-                    "matches what you spoke, then re-record."
-                )
+    if st.session_state.get('audio_cache_key') != cache_key:
+        transcript = None
+        detected_language = None
+
+        if gemini_available:
+            with st.spinner("🌐 Detecting language and transcribing..."):
+                result = transcribe_audio_gemini(audio_bytes, audio_value.type or "audio/wav")
+            if result:
+                transcript, detected_language = result
+            else:
+                st.info("Auto-detect had trouble with that recording — trying standard transcription.")
+
+        if transcript is None:
+            # Either Gemini isn't configured, or the Gemini call above failed —
+            # fall back to local speech_recognition with the selected language.
+            recognizer = sr.Recognizer()
+            with st.spinner("Transcribing your voice..."):
+                try:
+                    audio_value.seek(0)
+                    with sr.AudioFile(audio_value) as source:
+                        audio_data = recognizer.record(source)
+                        transcript = recognizer.recognize_google(audio_data, language=selected_lang_code)
+                        detected_language = selected_lang_name
+                except Exception:
+                    transcript = None
+
+        if transcript:
+            st.success(f"Heard ({detected_language}): \"{transcript}\"")
+        else:
+            st.warning("Couldn't transcribe that clearly — please re-record and try again.")
+
+        st.session_state['audio_cache_key'] = cache_key
+        st.session_state['spoken_text'] = transcript or ""
+        st.session_state['detected_language'] = detected_language
     else:
-        spoken_text = st.session_state.get('spoken_text', "")
-        st.success(f"Heard ({selected_lang_name}): \"{spoken_text}\"")
+        cached_transcript = st.session_state.get('spoken_text', "")
+        cached_language = st.session_state.get('detected_language')
+        if cached_transcript:
+            st.success(f"Heard ({cached_language}): \"{cached_transcript}\"")
 
-spoken_text = st.session_state.get('spoken_text', spoken_text)
+spoken_text = st.session_state.get('spoken_text', "")
 
 typed_desc = st.text_input("...or type a quick description instead (if the mic isn't working)")
 
@@ -346,10 +442,10 @@ if st.button("✨ Generate Professional Description", type="primary", use_contai
 
             category = st.session_state.get('category', FALLBACK_CATEGORY)
             material = extract_material(raw_input)
-            # If they typed instead of speaking, we have no language signal from
-            # the picker context — assume English for the typed fallback path,
-            # otherwise use whichever language was selected for the recording.
-            language_for_ai = selected_lang_name if spoken_text else "English"
+            # Typed input has no audio to detect a language from — assume
+            # English. Spoken input uses whatever was auto-detected by
+            # Gemini (or manually picked in the offline fallback).
+            language_for_ai = st.session_state.get('detected_language', 'English') if spoken_text else "English"
 
             ai_result = generate_ai_description(raw_input, category, material, language_for_ai)
 

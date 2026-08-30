@@ -7,6 +7,7 @@ import re
 import hashlib
 import json
 import google.genai as genai
+from google.genai import types
 import pandas as pd
 import os
 
@@ -28,14 +29,54 @@ def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
 
+def transcribe_audio_gemini(audio_bytes: bytes, mime_type: str):
+    """Sends the raw voice recording directly to Gemini so it can automatically
+    detect which language the artisan spoke (any Indian regional language or
+    English — no manual selection needed) and transcribe it in the same call.
+    Returns (transcript, detected_language_name) on success, or None if Gemini
+    isn't configured or the call/parse fails — callers should fall back to
+    local speech recognition in that case."""
+    client = get_gemini_client()
+    if client is None:
+        return None
+
+    prompt = """Listen to this audio of an Indian artisan describing their handmade product.
+
+Automatically detect which language they are speaking — it could be Hindi, Marathi, Tamil,
+Telugu, Bengali, Gujarati, Kannada, Malayalam, Punjabi, English, or another Indian language.
+Do not assume the language in advance; identify it from what you hear.
+
+Respond with ONLY valid JSON, no markdown code fences, no extra text, in exactly this shape:
+{"detected_language": "<English name of the language, e.g. Hindi, Marathi, Tamil>", "transcript": "<what they said, transcribed in its original language and script>"}"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                prompt,
+            ],
+        )
+        cleaned = response.text.strip()
+        cleaned = re.sub(r"^```(json)?|```$", "", cleaned, flags=re.MULTILINE).strip()
+        data = json.loads(cleaned)
+        transcript = data.get("transcript")
+        detected_language = data.get("detected_language")
+        if transcript:
+            return transcript, (detected_language or "Unknown")
+        return None
+    except Exception:
+        return None
+
+
 def generate_ai_description(raw_text: str, category: str, material: str, spoken_language: str):
-    """Calls Gemini to turn a rough description into a product name plus
-    English and Hindi e-commerce copy. `spoken_language` is the human-readable
-    name of the language the artisan actually spoke in (e.g. "Marathi"), so
-    Gemini knows what it's translating from rather than assuming English.
-    Returns (name, english, hindi) on success, or None if the API isn't
-    configured or the call/parse fails — callers should fall back to the
-    template-based generator in that case."""
+    """Calls Gemini to turn a rough (already-transcribed) description into a
+    product name plus English and Hindi e-commerce copy. `spoken_language` is
+    the human-readable name of the language the artisan spoke (auto-detected
+    upstream), so Gemini knows what it's translating from. Returns
+    (name, english, hindi) on success, or None if the API isn't configured or
+    the call/parse fails — callers should fall back to the template-based
+    generator in that case."""
     client = get_gemini_client()
     if client is None:
         return None
@@ -123,10 +164,12 @@ MATERIAL_KEYWORDS = [
     "ceramic", "iron", "cane", "wax", "paper"
 ]
 
-# -------------------- Supported voice languages --------------------
-# Labels are shown in native script first (so low-literacy / regional-language
-# users can recognize their own language at a glance), with the English name
-# in brackets. Codes are the locale strings Google's speech API expects.
+# -------------------- Voice languages (offline fallback only) --------------------
+# When Gemini is configured, language is auto-detected from the audio itself —
+# no picker needed. This list is only shown if Gemini isn't available, so the
+# app can still fall back to local speech_recognition with a manual choice.
+# Labels are shown in native script first, so low-literacy / regional-language
+# users can recognize their own language at a glance.
 LANGUAGES = {
     "हिंदी (Hindi)": ("hi-IN", "Hindi"),
     "English": ("en-IN", "English"),
@@ -186,9 +229,12 @@ def extract_material(text: str) -> str:
             return keyword.title()
     return "Traditional materials"
 
-def save_product(product_name, category, material, price, stock, english_desc, image):
+def save_product(product_name, category, material, price, stock, english_desc, image, language=None):
     """Appends one product to data/products.csv and saves its image to disk.
-    Creates the data/ and assets/products/ folders on first run."""
+    Creates the data/ and assets/products/ folders on first run.
+    `language` records which language the artisan spoke when describing the
+    product (auto-detected), for dashboard reporting — falls back to
+    "Not detected" if the artisan typed instead of speaking."""
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
 
@@ -204,6 +250,7 @@ def save_product(product_name, category, material, price, stock, english_desc, i
         "stock": stock,
         "english_desc": english_desc,
         "image_path": image_path,
+        "language": language or "Not detected",
     }])
 
     if os.path.exists(DATA_PATH):
@@ -276,65 +323,83 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-# -------------------- Mandatory photo gate --------------------
-# A product photo is REQUIRED. Nothing below this point (voice description,
-# pricing, publishing) is reachable without a successfully processed image —
-# rather than silently hiding the final step, we tell the artisan clearly why
-# they can't continue yet.
-if enhanced_image is None:
-    st.error("📸 A product photo is required. Please upload a photo above before continuing.")
-    st.stop()
-
 st.divider()
 
 # -------------------- 2. Speak About Your Product --------------------
 st.subheader("2️⃣ Speak About Your Product")
 st.markdown("🎤 Describe what it is, what it's made of, and how it's made — the AI will do the rest.")
 
-# ---- Language selector: one-tap buttons, native script first, so an ----
-# ---- artisan can pick their own language before recording. ----
-st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
-selected_label = st.pills(
-    "Voice language",
-    options=list(LANGUAGES.keys()),
-    default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
-    label_visibility="collapsed",
-)
-if selected_label is None:
-    # st.pills allows de-selecting; fall back to whatever was chosen before.
-    selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
-st.session_state['language_label'] = selected_label
-selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
+gemini_available = get_gemini_client() is not None
+selected_lang_code, selected_lang_name = LANGUAGES[DEFAULT_LANGUAGE_LABEL]
+
+if gemini_available:
+    st.caption("🌐 Speak in any Indian language — the AI will automatically detect it, no need to select.")
+else:
+    # Offline / no-API-key fallback: we can't auto-detect without Gemini, so
+    # ask the artisan to pick their language for local speech recognition.
+    st.warning("⚠️ AI auto-detect isn't configured — please select your language manually.")
+    st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
+    selected_label = st.pills(
+        "Voice language",
+        options=list(LANGUAGES.keys()),
+        default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
+        label_visibility="collapsed",
+    )
+    if selected_label is None:
+        selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
+    st.session_state['language_label'] = selected_label
+    selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
 
 audio_value = st.audio_input("Record your voice description")
 
-spoken_text = ""
 if audio_value is not None:
-    # Hash the audio + language together — re-transcribe only when the
-    # recording OR the chosen language actually changes, not on every rerun.
-    audio_hash = hashlib.md5(audio_value.getvalue()).hexdigest()
-    transcription_key = f"{audio_hash}:{selected_lang_code}"
+    audio_bytes = audio_value.getvalue()
+    cache_key = hashlib.md5(audio_bytes).hexdigest()
+    if not gemini_available:
+        # Re-transcribe if the artisan changes the manual language too.
+        cache_key += f":{selected_lang_code}"
 
-    if st.session_state.get('transcription_key') != transcription_key:
-        recognizer = sr.Recognizer()
-        with st.spinner(f"Transcribing your {selected_lang_name} voice description..."):
-            try:
-                with sr.AudioFile(audio_value) as source:
-                    audio_data = recognizer.record(source)
-                    spoken_text = recognizer.recognize_google(audio_data, language=selected_lang_code)
-                st.success(f"Heard ({selected_lang_name}): \"{spoken_text}\"")
-                st.session_state['spoken_text'] = spoken_text
-                st.session_state['transcription_key'] = transcription_key
-            except Exception:
-                st.warning(
-                    "Couldn't transcribe that clearly — please check the selected language "
-                    "matches what you spoke, then re-record."
-                )
+    if st.session_state.get('audio_cache_key') != cache_key:
+        transcript = None
+        detected_language = None
+
+        if gemini_available:
+            with st.spinner("🌐 Detecting language and transcribing..."):
+                result = transcribe_audio_gemini(audio_bytes, audio_value.type or "audio/wav")
+            if result:
+                transcript, detected_language = result
+            else:
+                st.info("Auto-detect had trouble with that recording — trying standard transcription.")
+
+        if transcript is None:
+            # Either Gemini isn't configured, or the Gemini call above failed —
+            # fall back to local speech_recognition with the selected language.
+            recognizer = sr.Recognizer()
+            with st.spinner("Transcribing your voice..."):
+                try:
+                    audio_value.seek(0)
+                    with sr.AudioFile(audio_value) as source:
+                        audio_data = recognizer.record(source)
+                        transcript = recognizer.recognize_google(audio_data, language=selected_lang_code)
+                        detected_language = selected_lang_name
+                except Exception:
+                    transcript = None
+
+        if transcript:
+            st.success(f"Heard ({detected_language}): \"{transcript}\"")
+        else:
+            st.warning("Couldn't transcribe that clearly — please re-record and try again.")
+
+        st.session_state['audio_cache_key'] = cache_key
+        st.session_state['spoken_text'] = transcript or ""
+        st.session_state['detected_language'] = detected_language
     else:
-        spoken_text = st.session_state.get('spoken_text', "")
-        st.success(f"Heard ({selected_lang_name}): \"{spoken_text}\"")
+        cached_transcript = st.session_state.get('spoken_text', "")
+        cached_language = st.session_state.get('detected_language')
+        if cached_transcript:
+            st.success(f"Heard ({cached_language}): \"{cached_transcript}\"")
 
-spoken_text = st.session_state.get('spoken_text', spoken_text)
+spoken_text = st.session_state.get('spoken_text', "")
 
 typed_desc = st.text_input("...or type a quick description instead (if the mic isn't working)")
 
@@ -346,10 +411,10 @@ if st.button("✨ Generate Professional Description", type="primary", use_contai
 
             category = st.session_state.get('category', FALLBACK_CATEGORY)
             material = extract_material(raw_input)
-            # If they typed instead of speaking, we have no language signal from
-            # the picker context — assume English for the typed fallback path,
-            # otherwise use whichever language was selected for the recording.
-            language_for_ai = selected_lang_name if spoken_text else "English"
+            # Typed input has no audio to detect a language from — assume
+            # English. Spoken input uses whatever was auto-detected (or
+            # manually picked in the offline fallback).
+            language_for_ai = st.session_state.get('detected_language', 'English') if spoken_text else "English"
 
             ai_result = generate_ai_description(raw_input, category, material, language_for_ai)
 
@@ -458,6 +523,7 @@ if enhanced_image is not None and 'english_desc' in st.session_state:
             stock=stock_qty,
             english_desc=st.session_state['english_desc'],
             image=enhanced_image,
+            language=st.session_state.get('detected_language'),
         )
         st.success("✅ PRODUCT PUBLISHED — your product is now in the AGR Sutra Marketplace.")
         st.balloons()
