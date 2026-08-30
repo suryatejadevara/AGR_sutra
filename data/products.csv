@@ -1,7 +1,7 @@
 product_name,category,material,language,price,stock,english_desc,image_path
 Handwoven Basket,Handicraft,Bamboo,Hindi,25,10,"A sturdy handwoven bamboo basket crafted by local artisans, ideal for storage or decor.",data/images/basket1.jpg
 Clay Water Pot,Pottery,Terracotta,Marathi,15,5,"A traditional terracotta pot that keeps water naturally cool, handmade on a potter's wheel.",data/images/pot1.jpg
-Embroidered Wall Hanging,Handloom / Textile,Cotton,Not detected,40,3,"A hand-embroidered cotton wall hanging featuring traditional folk motifs.",data/images/wallhanging1.webp
+Embroidered Wall Hanging,Handloom / Textile,Cotton,Not detected,40,3,A hand-embroidered cotton wall hanging featuring traditional folk motifs.,data/images/wallhanging1.webp
 Whatsapp Application,Handicraft,Traditional materials,Not detected,288,5,"Handcrafted Whatsapp Application made using traditional techniques by skilled Indian artisans.
 
 Material: Traditional materials
@@ -18,3 +18,11 @@ Category: Handicraft
 this is an utensils
 
 This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products/this_is_an_utensils.png
+This Is A Steel Utensils Used,Handicraft,Traditional materials,Not detected,318,5,"Handcrafted This Is A Steel Utensils Used made using traditional techniques by skilled Indian artisans.
+
+Material: Traditional materials
+Category: Handicraft
+
+this is a steel utensils used for coocking 
+
+This authentic piece reflects the rich cultural heritage and craftsmanship of Indian artisans. Perfect for home décor, gifting, or wholesale buyers looking for genuine handmade products.",assets/products\this_is_a_steel_utensils_used.png

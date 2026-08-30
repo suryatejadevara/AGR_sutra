@@ -665,4 +665,15 @@ if enhanced_image is not None and 'english_desc' in st.session_state:
             language=st.session_state.get('detected_language'),
         )
         st.success("✅ PRODUCT PUBLISHED — your product is now in the AGR Sutra Marketplace.")
-        st.balloons()
+
+        # Clear per-product session state so the next listing starts fresh,
+        # then send the artisan back to the landing page.
+        for key in (
+            'processed_file_hash', 'input_image', 'enhanced_image', 'category',
+            'audio_cache_key', 'spoken_text', 'detected_language',
+            'english_desc', 'hindi_desc', 'product_name', 'material',
+        ):
+            st.session_state.pop(key, None)
+
+        st.session_state['selling_started'] = False
+        st.rerun()
