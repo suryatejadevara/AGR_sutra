@@ -7,11 +7,7 @@ import re
 import hashlib
 import json
 import google.generativeai as genai
-import pandas as pd
-import os
 
-DATA_PATH = "data/products.csv"
-IMAGE_DIR = "assets/products"
 # -------------------- Gemini Setup --------------------
 # Store your key in .streamlit/secrets.toml as:
 #   GEMINI_API_KEY = "your-key-here"
@@ -136,33 +132,6 @@ def extract_material(text: str) -> str:
             return keyword.title()
     return "Traditional materials"
 
-def save_product(product_name, category, material, price, stock, english_desc, image):
-    """Appends one product to data/products.csv and saves its image to disk.
-    Creates the data/ and assets/products/ folders on first run."""
-    os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
-    os.makedirs(IMAGE_DIR, exist_ok=True)
-
-    safe_name = re.sub(r"[^a-zA-Z0-9]+", "_", product_name).strip("_").lower()
-    image_path = os.path.join(IMAGE_DIR, f"{safe_name}.png")
-    image.save(image_path, format="PNG")
-
-    new_row = pd.DataFrame([{
-        "product_name": product_name,
-        "category": category,
-        "material": material,
-        "price": price,
-        "stock": stock,
-        "english_desc": english_desc,
-        "image_path": image_path,
-    }])
-
-    if os.path.exists(DATA_PATH):
-        df = pd.read_csv(DATA_PATH)
-        df = pd.concat([df, new_row], ignore_index=True)
-    else:
-        df = new_row
-
-    df.to_csv(DATA_PATH, index=False)
 
 # -------------------- 1. Image Upload & Background Removal --------------------
 st.subheader("1️⃣ Upload Product Photo")
@@ -344,23 +313,12 @@ if enhanced_image is not None and 'english_desc' in st.session_state:
 
     st.markdown(f"### {st.session_state['product_name']}")
     st.image(enhanced_image, width=300)
+
     st.markdown(f"**Category:** {current_category}")
     st.markdown(f"**Material:** {st.session_state.get('material', 'Traditional materials')}")
     st.markdown("**English Description:**")
     st.write(st.session_state['english_desc'])
+
     st.markdown(f"**Suggested Price:** ₹ {suggested_price}")
 
-    stock_qty = st.number_input("Available Quantity", min_value=1, value=5)
-
-    if st.button("🚀 PUBLISH PRODUCT", type="primary"):
-        save_product(
-            product_name=st.session_state['product_name'],
-            category=current_category,
-            material=st.session_state.get('material', 'Traditional materials'),
-            price=suggested_price,
-            stock=stock_qty,
-            english_desc=st.session_state['english_desc'],
-            image=enhanced_image,
-        )
-        st.success("✅ PRODUCT PUBLISHED — your product is now in the AGR Sutra Marketplace.")
-        st.balloons()
+    st.success("✅ Your product is ready for digital marketplace / WhatsApp / Exhibition!")
