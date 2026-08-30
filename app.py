@@ -256,7 +256,7 @@ if not st.session_state['selling_started']:
             st.switch_page("pages/Dashboard.py")
     with col2:
         if st.button("🛒 Marketplace", use_container_width=True):
-            st.switch_page("pages/Marketplace.py")
+            st.switch_page("pages/marketplace.py")
 
     st.stop()
 
