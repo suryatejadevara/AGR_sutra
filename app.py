@@ -472,35 +472,37 @@ st.subheader("2️⃣ Speak About Your Product")
 st.markdown("🎤 Describe what it is, what it's made of, and how it's made — the AI will do the rest.")
 
 # ---- Language: Gemini auto-detects it from the audio directly — no list, ----
-# ---- no ceiling. The manual picker below only appears if Gemini isn't ----
-# ---- configured, as an offline fallback with limited language coverage. ----
+# ---- no ceiling. The manual picker is ALWAYS shown as a safety net, since ----
+# ---- the offline fallback (speech_recognition) needs a real language code ----
+# ---- if Gemini fails on a specific recording. ----
 gemini_available = get_gemini_client() is not None
-selected_lang_code, selected_lang_name = LANGUAGES[DEFAULT_LANGUAGE_LABEL]
 
 if gemini_available:
-    st.caption("🌐 Speak in any language — the AI will automatically detect it, no need to select.")
+    st.caption("🌐 Speak in any language — the AI will automatically detect it. "
+               "(The picker below is only used if auto-detect fails on a recording.)")
 else:
     st.warning("⚠️ AI auto-detect isn't configured — please select your language manually.")
-    st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
-    selected_label = st.pills(
-        "Voice language",
-        options=list(LANGUAGES.keys()),
-        default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
-        label_visibility="collapsed",
-    )
-    if selected_label is None:
-        selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
-    st.session_state['language_label'] = selected_label
-    selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
+
+st.markdown("**🌐 अपनी भाषा चुनें / Select your language**")
+selected_label = st.pills(
+    "Voice language",
+    options=list(LANGUAGES.keys()),
+    default=st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL),
+    label_visibility="collapsed",
+)
+if selected_label is None:
+    selected_label = st.session_state.get('language_label', DEFAULT_LANGUAGE_LABEL)
+st.session_state['language_label'] = selected_label
+selected_lang_code, selected_lang_name = LANGUAGES[selected_label]
 
 audio_value = st.audio_input("Record your voice description")
 
 if audio_value is not None:
     audio_bytes = audio_value.getvalue()
     cache_key = hashlib.md5(audio_bytes).hexdigest()
-    if not gemini_available:
-        # Re-transcribe if the artisan changes the manual language too.
-        cache_key += f":{selected_lang_code}"
+    # Always fold the manual language into the cache key, since it can affect
+    # the fallback transcription even when Gemini is available.
+    cache_key += f":{selected_lang_code}"
 
     if st.session_state.get('audio_cache_key') != cache_key:
         transcript = None
@@ -512,20 +514,35 @@ if audio_value is not None:
             if result:
                 transcript, detected_language = result
             else:
-                st.info("Auto-detect had trouble with that recording — trying standard transcription.")
+                st.info("Auto-detect had trouble with that recording — trying standard transcription "
+                        f"in {selected_lang_name}.")
 
         if transcript is None:
             # Either Gemini isn't configured, or the Gemini call above failed —
-            # fall back to local speech_recognition with the selected language.
+            # fall back to local speech_recognition with the SELECTED language
+            # (not a hardcoded default).
             recognizer = sr.Recognizer()
+            # Loosen defaults so brief background noise / a stray sound doesn't
+            # cause the whole clip to be misread as silence or gibberish.
+            recognizer.dynamic_energy_threshold = True
             with st.spinner("Transcribing your voice..."):
                 try:
                     audio_value.seek(0)
                     with sr.AudioFile(audio_value) as source:
+                        # Sample the first ~0.5s to calibrate for background
+                        # noise before reading the rest of the recording.
+                        recognizer.adjust_for_ambient_noise(source, duration=0.5)
                         audio_data = recognizer.record(source)
-                        transcript = recognizer.recognize_google(audio_data, language=selected_lang_code)
-                        detected_language = selected_lang_name
-                except Exception:
+                    transcript = recognizer.recognize_google(audio_data, language=selected_lang_code)
+                    detected_language = selected_lang_name
+                except sr.UnknownValueError:
+                    st.warning("Couldn't make out any speech in that recording — please re-record.")
+                    transcript = None
+                except sr.RequestError as e:
+                    st.error(f"Speech recognition service error: {e}")
+                    transcript = None
+                except Exception as e:
+                    st.error(f"Unexpected transcription error: {e}")
                     transcript = None
 
         if transcript:
