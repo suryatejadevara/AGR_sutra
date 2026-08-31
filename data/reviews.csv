@@ -1,0 +1,2 @@
+review_id,order_id,product_id,seller_id,buyer_id,rating,comment,created_at,review_type
+26945c35,,9f7d4b08,60c32afc,,5,this is a nice product,2026-09-01T00:08:46,seller_initial

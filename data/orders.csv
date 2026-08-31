@@ -1,0 +1,3 @@
+order_id,buyer_id,seller_id,product_id,product_name,quantity,total_amount,shipping_address,payment_method,status,created_at
+7C1F3B22,9aae86ac,a79107b8,d117ba73,This Is A Pot,1,240,kakinada,Cash on Delivery,New,2026-08-31T23:38:50
+FF18C844,e2ed30e7,60c32afc,9f7d4b08,This Is A Pot,1,230,kakinada,Cash on Delivery,Cancelled,2026-09-01T00:10:17

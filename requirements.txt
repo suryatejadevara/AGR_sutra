@@ -1,7 +1,11 @@
-streamlit>=1.35
+streamlit
 pandas
 Pillow
 rembg
+google-generativeai
 SpeechRecognition
-google-genai
-scikit-learn
+pydub
+noisereduce
+soundfile
+numpy
+deep-translator
