@@ -14,24 +14,18 @@ LANGUAGE_OPTIONS = [
     "తెలుగు (Telugu)", "বাংলা (Bengali)", "ગુજરાતી (Gujarati)",
 ]
 
+
+def _go_to_dashboard(user: dict):
+    """Send a logged-in user straight to their role's dashboard."""
+    if user.get("role") == "Seller":
+        st.switch_page("pages/1_Seller_Dashboard.py")
+    else:
+        st.switch_page("pages/6_Buyer_Home.py")
+
+
 # -------------------- Already logged in --------------------
 if is_logged_in():
-    user = current_user()
-    st.title("🌱 AGR Sutra")
-    st.success(f"Welcome back, **{user['full_name']}**! You're logged in as a **{user['role']}**.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if user["role"] == "Seller":
-            if st.button("Go to Seller Dashboard →", type="primary", use_container_width=True):
-                st.switch_page("pages/1_Seller_Dashboard.py")
-        else:
-            if st.button("Go to Buyer Home →", type="primary", use_container_width=True):
-                st.switch_page("pages/6_Buyer_Home.py")
-    with col2:
-        if st.button("Log out", use_container_width=True):
-            log_out()
-            st.rerun()
+    _go_to_dashboard(current_user())
     st.stop()
 
 # -------------------- Step: Welcome --------------------
@@ -111,7 +105,8 @@ elif step in ("otp_mobile", "otp_email"):
                 )
                 if existing:
                     log_in(existing)
-                    st.rerun()
+                    st.session_state["auth_step"] = "welcome"
+                    _go_to_dashboard(existing)
                 else:
                     st.session_state["auth_step"] = "profile"
                     st.success("Verified!")
@@ -194,8 +189,8 @@ elif step == "role":
             role=role,
         )
         log_in(user)
-        st.session_state["auth_step"] = "welcome"
-        st.rerun()
+        st.session_state["auth_step"] = "welcome"  # reset for next login
+        _go_to_dashboard(user)
 
     if st.button("← Back"):
         st.session_state["auth_step"] = "profile"

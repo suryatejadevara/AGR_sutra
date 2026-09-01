@@ -4,8 +4,9 @@ import hashlib
 import streamlit as st
 from PIL import Image
 
-from utils.auth import require_login
+from utils.auth import require_login, log_in
 from utils.data_store import save_product
+from utils.geo import request_browser_location, consume_location_query_params, valid_coord
 from utils.ai_engine import (
     CATEGORIES, FALLBACK_CATEGORY, LANGUAGES, DEFAULT_LANGUAGE_LABEL,
     is_gemini_available, transcribe_audio_gemini, transcribe_offline,
@@ -21,6 +22,36 @@ st.caption("Upload photo → AI cleans image → Describe by voice → AI writes
 
 if st.button("← Back to Dashboard"):
     st.switch_page("pages/1_Seller_Dashboard.py")
+
+st.divider()
+
+# -------------------- 0. Location --------------------
+# Captured here (not just in Profile Settings) because sellers often
+# list from wherever the product actually is -- workshop, market stall,
+# home -- and that can change listing to listing. Refreshing it at
+# publish-time is what keeps the location buyers see on the Product
+# Detail page current, instead of a single stale value set once at
+# sign-up.
+st.subheader("📍 Confirm Your Current Location")
+st.caption("Buyers see this on the product page so they know where it's shipping from. "
+           "Update it here each time you list, since sellers don't always list from the same place.")
+
+updated_user = consume_location_query_params(user["user_id"])
+if updated_user:
+    log_in(updated_user)
+    user = updated_user
+    st.success("Location updated!")
+    st.rerun()
+
+saved_lat = valid_coord(user.get("latitude"))
+saved_lon = valid_coord(user.get("longitude"))
+if saved_lat is not None and saved_lon is not None:
+    st.caption(f"📌 Currently saved: {saved_lat:.5f}, {saved_lon:.5f}")
+else:
+    st.caption("⚠️ No location saved yet — buyers won't see a pickup location on your products until you add one.")
+
+if st.button("📍 Update My Current Location", use_container_width=True):
+    request_browser_location()
 
 st.divider()
 
@@ -209,6 +240,11 @@ if enhanced_image is not None and "english_desc" in st.session_state:
     st.markdown("**English Description:**")
     st.write(st.session_state["english_desc"])
     st.markdown(f"**Suggested Price:** ₹ {suggested_price}")
+
+    if saved_lat is not None and saved_lon is not None:
+        st.caption(f"📍 Will be listed as shipping from: {saved_lat:.5f}, {saved_lon:.5f}")
+    else:
+        st.caption("📍 No location saved — consider adding one above so buyers know where this ships from.")
 
     stock_qty = st.number_input("Available Quantity", min_value=1, value=5)
 

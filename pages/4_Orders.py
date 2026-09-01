@@ -69,14 +69,24 @@ def render_order(row, allow_rate_buyer=False):
 
 with tab_new:
     subset = my_orders[my_orders["status"] == "New"]
-    st.caption("No new orders.") if subset.empty else [render_order(r) for _, r in subset.iloc[::-1].iterrows()]
+    if subset.empty:
+        st.caption("No new orders.")
+    else:
+        for _, r in subset.iloc[::-1].iterrows():
+            render_order(r)
 
 with tab_processing:
     subset = my_orders[my_orders["status"] == "Processing"]
-    st.caption("Nothing in progress.") if subset.empty else [render_order(r) for _, r in subset.iloc[::-1].iterrows()]
+    if subset.empty:
+        st.caption("Nothing in progress.")
+    else:
+        for _, r in subset.iloc[::-1].iterrows():
+            render_order(r)
 
 with tab_completed:
     subset = my_orders[my_orders["status"] == "Completed"]
-    st.caption("No completed orders yet.") if subset.empty else [
-        render_order(r, allow_rate_buyer=True) for _, r in subset.iloc[::-1].iterrows()
-    ]
+    if subset.empty:
+        st.caption("No completed orders yet.")
+    else:
+        for _, r in subset.iloc[::-1].iterrows():
+            render_order(r, allow_rate_buyer=True)

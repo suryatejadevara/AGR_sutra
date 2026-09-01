@@ -23,7 +23,7 @@ REVIEWS_PATH = os.path.join(DATA_DIR, "reviews.csv")
 
 USER_COLUMNS = [
     "user_id", "full_name", "phone", "email", "pin_code",
-    "language", "role", "created_at",
+    "language", "role", "latitude", "longitude", "created_at",
 ]
 PRODUCT_COLUMNS = [
     "product_id", "seller_id", "product_name", "category", "material",
@@ -109,6 +109,14 @@ def get_user_by_contact(phone: str = "", email: str = ""):
     if match.empty:
         return None
     return match.iloc[-1].to_dict()
+
+def get_user(user_id: str) -> dict | None:
+    """Look up any user (buyer or seller) by their user_id."""
+    df = load_users()
+    if df.empty:
+        return None
+    match = df[df["user_id"] == user_id]
+    return None if match.empty else match.iloc[0].to_dict()
 
 
 def create_or_update_user(full_name, phone, email, pin_code, language, role) -> dict:

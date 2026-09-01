@@ -1,3 +1,8 @@
 order_id,buyer_id,seller_id,product_id,product_name,quantity,total_amount,shipping_address,payment_method,status,created_at
-7C1F3B22,9aae86ac,a79107b8,d117ba73,This Is A Pot,1,240,kakinada,Cash on Delivery,New,2026-08-31T23:38:50
+7C1F3B22,9aae86ac,a79107b8,d117ba73,This Is A Pot,1,240,kakinada,Cash on Delivery,Completed,2026-08-31T23:38:50
 FF18C844,e2ed30e7,60c32afc,9f7d4b08,This Is A Pot,1,230,kakinada,Cash on Delivery,Cancelled,2026-09-01T00:10:17
+383DD007,95dca5b9,60c32afc,9f7d4b08,This Is A Pot,2,460,kakinada,Cash on Delivery,Cancelled,2026-09-01T13:05:18
+4657F262,d79aafe6,984fa527,2b070c3d,Handmade Product,1,240,kakinada,Cash on Delivery,Processing,2026-09-01T13:16:22
+DB79E1C7,997c05be,984fa527,2b070c3d,Handmade Product,2,480,cxvfdd,Cash on Delivery,Cancelled,2026-09-01T15:57:50
+860F4262,0a6f3820,a79107b8,d117ba73,This Is A Pot,1,240,hello,Cash on Delivery,Completed,2026-09-01T21:13:47
+F3EC7F4B,024ff36b,984fa527,2b070c3d,Handmade Product,1,240,kakinada,UPI,New,2026-09-01T21:21:27
